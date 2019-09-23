@@ -1,0 +1,7 @@
+pbr>=1.1.0
+
+PyYAML
+cherrypy
+routes
+requests
+openstacksdk

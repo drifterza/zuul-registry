@@ -1,0 +1,23 @@
+registry:
+  address: '127.0.0.1'
+  port: 9000
+  tls-cert: /path/to/cert.pem
+  tls-key: /path/to/cert.key
+  #shadow:
+  #  docker.io:
+  #    hostname: local-docker-mirror.example.com
+  #    port: 443
+  users:
+    - name: testuser
+      pass: testpass
+      access: write
+    - name: anonymous
+      pass: ''
+      access: read
+  xstorage:
+    driver: swift
+    cloud: registry
+    container: test_registry
+  storage:
+    driver: filesystem
+    root: /tmp/storage
