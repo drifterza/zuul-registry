@@ -17,14 +17,14 @@ import argparse
 import sys
 import logging
 import cherrypy
-import filesystem
-import storage
-import swift
 import hashlib
 import json
-import pprint
 import urllib
 import yaml
+
+from . import filesystem
+from . import storage
+from . import swift
 
 DRIVERS = {
     'filesystem': filesystem.Driver,
@@ -297,12 +297,12 @@ class RegistryServer:
     def prune(self):
         self.store.prune()
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description='Zuul registry server')
     parser.add_argument('-c', dest='config',
                         help='Config file path',
-                        default='/conf/registry.conf')
+                        default='/conf/registry.yaml')
     parser.add_argument('-d', dest='debug',
                         help='Debug log level',
                         action='store_true')

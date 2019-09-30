@@ -1,0 +1,15 @@
+registry:
+  address: '0.0.0.0'
+  port: 9000
+  tls-cert: /tls/cert.pem
+  tls-key: /tls/cert.key
+  users:
+    - name: testuser
+      pass: testpass
+      access: write
+    - name: anonymous
+      pass: ''
+      access: read
+  storage:
+    driver: filesystem
+    root: /storage

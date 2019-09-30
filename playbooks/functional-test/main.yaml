@@ -1,0 +1,56 @@
+- name: Create workspace directory
+  file:
+    state: directory
+    path: "{{ workspace }}"
+
+- name: Create storage directory
+  file:
+    state: directory
+    path: "{{ workspace }}/storage"
+
+- name: Create TLS directory
+  file:
+    state: directory
+    path: "{{ workspace }}/tls"
+
+- name: Generate a TLS key for the registry
+  command: "openssl req -x509 -newkey rsa:2048 -keyout {{ workspace }}/tls/cert.key -out {{ workspace }}/tls/cert.pem -days 365 -nodes -subj '/C=US/ST=California/L=Oakland/O=Company Name/OU=Org/CN=127.0.0.1'"
+    
+- name: Run docker-compose up
+  shell:
+    cmd: docker-compose up -d
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Print list of images
+  command: docker image ls --all --digests --no-trunc
+
+- name: Pull the test image from Docker Hub
+  command: docker pull registry
+
+- name: Tag the test image with a realistic name
+  command: docker tag registry localhost:9000/test/registry
+
+- name: Log in to local registry
+  command: docker login localhost:9000 -u testuser -p testpass
+  ignore_errors: true
+  
+- name: Push the test image to zuul-registry
+  command: docker image push localhost:9000/test/registry
+  
+- name: Remove the test image from the local cache
+  command: docker rmi localhost:9000/test/registry
+
+- name: Remove the test image from the local cache
+  command: docker rmi registry
+
+- name: Clean up the local image cache
+  command: docker image prune -f
+
+- name: Print list of images
+  command: docker image ls --all --digests --no-trunc
+
+- name: Pull the image from zuul-registry
+  command: docker image pull localhost:9000/test/registry
+
+- name: Print list of images
+  command: docker image ls --all --digests --no-trunc

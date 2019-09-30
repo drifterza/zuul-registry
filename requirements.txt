@@ -5,3 +5,5 @@ cherrypy
 routes
 requests
 openstacksdk
+python-dateutil
+rehash

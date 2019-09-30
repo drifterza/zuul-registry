@@ -1,7 +1,64 @@
+# Image building jobs
+- secret:
+    name: zuul-registry-dockerhub
+    data:
+      username: zuulzuul
+      password: !encrypted/pkcs1-oaep
+        - mc+bK6/dQJ/gzrR5jFYEm9eepVfWG0xiTxxPCunDN0tgbis+xbe1cBOAEdZmjkNrXO/0V
+          6d7EcH0JP8mD9jgaTMVWKhVHUF4m/pikP5S4oKgfQYf9PKtzaSp298fhu+4RzuKR01ywj
+          ks8MWj2oZKJeikQVVbK6z8wMQYirxmaUvivKOU6eJmiPMYs3AaC+P6oc1vEGHMFaa+QpG
+          3hD2z+y7Ix/YFKyDQPk4DOs1lTveE18RCBIiP4IRXuYxKkR5uSqj4KEmdcdxBZ6mQyTbw
+          uZwLMPlkFTNYkaKetobVMo79I3HEACPRN7ylhu96690DsJ7QkvEQD6LPqw82XODuM+T4o
+          u9kJLLhPhZEALGE9yga4RC6YxfWx1KbJRr74vu5ctxTffuDQGwHjYYf76B0TPuX72UuaP
+          MqG2F1M9Agr0WpTufyXD/33a+G4iybR0kY21cfv6TEYsock43d8k2ygaPgKqUHFQ5EEia
+          PiMzt/6vKATl+EUZEJIbqLlP0GyB6RTHylnzSjrInQEumOcsZPx0zhW0hvrs1M8L1WQqQ
+          VksKhsXrJPO9AS2+/7GUC3+Epsui7R/4A52JK2L73iNh4S+BwBIMMqruC9msbNVPtzEPd
+          HzKPwH9EkgIRZqvpu7oP9EHzKmsaYk/dRBWSwZ9f9E1GRiTuQ11DoI2km4iTJI=
+
+- job:
+    name: zuul-registry-build-image
+    description: Build and test a Docker image.
+    parent: opendev-build-docker-image
+    allowed-projects: zuul/zuul-registry
+    run: playbooks/functional-test/run.yaml
+    vars: &image_vars
+      docker_images:
+        - context: .
+          repository: zuul/zuul-registry
+          target: zuul-registry
+
+- job:
+    name: zuul-registry-upload-image
+    parent: opendev-upload-docker-image
+    description: Build and test a Docker image and upload to Docker Hub.
+    allowed-projects: zuul/zuul-registry
+    run: playbooks/functional-test/run.yaml
+    secrets:
+      name: docker_credentials
+      secret: zuul-registry-dockerhub
+      pass-to-parent: true
+    vars: *image_vars
+
+- job:
+    name: zuul-registry-promote-image
+    parent: opendev-promote-docker-image
+    description: Promote previously uploaded Docker image.
+    allowed-projects: zuul/zuul-registry
+    secrets:
+      name: docker_credentials
+      secret: zuul-registry-dockerhub
+      pass-to-parent: true
+    nodeset:
+      nodes: []
+    vars: *image_vars
+
 - project:
     check:
       jobs:
-        - noop
+        - zuul-registry-build-image
     gate:
       jobs:
-        - noop
+        - zuul-registry-upload-image
+    promote:
+      jobs:
+        - zuul-registry-promote-image

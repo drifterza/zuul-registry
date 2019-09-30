@@ -24,4 +24,4 @@ COPY --from=builder /output/ /output
 RUN /output/install-from-bindep
 
 VOLUME /storage
-CMD ["/usr/local/bin/zuul-registry -c /conf/registry.conf serve"]
+CMD ["/usr/local/bin/zuul-registry", "-c", "/conf/registry.yaml", "serve"]

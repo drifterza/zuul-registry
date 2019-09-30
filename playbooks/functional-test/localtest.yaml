@@ -1,0 +1,7 @@
+- hosts: localhost
+  vars:
+    workspace: /tmp/registry-test
+    local: true
+  tasks:
+    - name: Run main tasks
+      include_tasks: main.yaml

@@ -15,7 +15,8 @@
 
 import os
 import time
-import storageutils
+
+from . import storageutils
 
 class FilesystemDriver(storageutils.StorageDriver):
     def __init__(self, conf):

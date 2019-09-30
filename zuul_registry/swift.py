@@ -23,7 +23,7 @@ import json
 
 import dateutil.parser
 
-import storageutils
+from . import storageutils
 
 POST_ATTEMPTS = 3
 
