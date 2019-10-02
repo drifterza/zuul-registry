@@ -27,6 +27,7 @@ from . import storageutils
 
 POST_ATTEMPTS = 3
 
+
 def retry_function(func):
     for attempt in range(1, POST_ATTEMPTS + 1):
         try:
@@ -39,6 +40,7 @@ def retry_function(func):
             else:
                 logging.exception("Error on attempt %d" % attempt)
                 time.sleep(attempt * 10)
+
 
 class SwiftDriver(storageutils.StorageDriver):
     log = logging.getLogger('registry.swift')
@@ -76,7 +78,8 @@ class SwiftDriver(storageutils.StorageDriver):
             else:
                 objpath = obj['name']
                 name = obj['name'].split('/')[-1]
-                ctime = dateutil.parser.parse(obj['last_modified']+'Z').timestamp()
+                ctime = dateutil.parser.parse(
+                    obj['last_modified'] + 'Z').timestamp()
                 isdir = False
             ret.append(storageutils.ObjectInfo(
                 objpath, name, ctime, isdir))
@@ -126,7 +129,7 @@ class SwiftDriver(storageutils.StorageDriver):
         dst = os.path.join(self.container_name, dst_path)
         retry_function(
             lambda: self.conn.session.request(
-                self.get_url(src_path)+"?multipart-manfest=get",
+                self.get_url(src_path) + "?multipart-manfest=get",
                 'COPY',
                 headers={'Destination': dst}
             ))
@@ -136,7 +139,7 @@ class SwiftDriver(storageutils.StorageDriver):
 
     def cat_objects(self, path, chunks):
         manifest = []
-        #TODO: Would it be better to move 1-chunk objects?
+        # TODO: Would it be better to move 1-chunk objects?
         for chunk_path in chunks:
             ret = retry_function(
                 lambda: self.conn.session.head(self.get_url(chunk_path)))
@@ -148,7 +151,8 @@ class SwiftDriver(storageutils.StorageDriver):
                              'size_bytes': ret.headers['Content-Length']})
         retry_function(lambda:
                        self.conn.session.put(
-                           self.get_url(path)+"?multipart-manifest=put",
+                           self.get_url(path) + "?multipart-manifest=put",
                            data=json.dumps(manifest)))
+
 
 Driver = SwiftDriver

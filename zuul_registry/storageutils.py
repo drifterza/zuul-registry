@@ -15,12 +15,14 @@
 
 from abc import ABCMeta, abstractmethod
 
+
 class ObjectInfo:
     def __init__(self, path, name, ctime, isdir):
         self.path = path
         self.name = name
         self.ctime = ctime
         self.isdir = isdir
+
 
 class StorageDriver(metaclass=ABCMeta):
     """Base class for storage drivers.

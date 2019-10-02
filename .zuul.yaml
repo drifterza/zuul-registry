@@ -56,9 +56,15 @@
     check:
       jobs:
         - zuul-registry-build-image
+        - tox-pep8
+        - tox-py37:
+            nodeset: fedora-latest
     gate:
       jobs:
         - zuul-registry-upload-image
+        - tox-pep8
+        - tox-py37:
+            nodeset: fedora-latest
     promote:
       jobs:
         - zuul-registry-promote-image

@@ -23,6 +23,7 @@ import threading
 import time
 from uuid import uuid4
 
+
 class UploadRecord:
     """Information about an upload.
 
@@ -65,15 +66,18 @@ class UploadRecord:
         data = json.loads(data.decode('utf8'))
         self.chunks = data['chunks']
         hash_state = data['hash_state']
-        hash_state['md_data'] = base64.decodebytes(hash_state['md_data'].encode('ascii'))
+        hash_state['md_data'] = base64.decodebytes(
+            hash_state['md_data'].encode('ascii'))
         self.hasher.__setstate__(hash_state)
 
     def dump(self):
         hash_state = self.hasher.__getstate__()
-        hash_state['md_data'] = base64.encodebytes(hash_state['md_data']).decode('ascii')
-        data = dict(chunks = self.chunks,
-                    hash_state = hash_state)
+        hash_state['md_data'] = base64.encodebytes(
+            hash_state['md_data']).decode('ascii')
+        data = dict(chunks=self.chunks,
+                    hash_state=hash_state)
         return json.dumps(data).encode('utf8')
+
 
 class UploadStreamer:
     """Stream an upload to the object storage.
@@ -95,6 +99,7 @@ class UploadStreamer:
             if d is None:
                 break
             yield d
+
 
 class Storage:
     """Storage abstraction layer.
@@ -145,7 +150,6 @@ class Storage:
 
         """
         uuid = uuid4().hex
-        path = os.path.join(namespace, 'uploads', uuid, 'metadata')
         upload = UploadRecord()
         self._update_upload(namespace, uuid, upload)
         return uuid
@@ -198,7 +202,7 @@ class Storage:
         t.join()
         upload.chunks.append(dict(size=size))
         self._update_upload(namespace, uuid, upload)
-        return upload.size-size, upload.size
+        return upload.size - size, upload.size
 
     def store_upload(self, namespace, uuid, digest):
         """Complete an upload.
@@ -215,7 +219,7 @@ class Storage:
         # Move the chunks into the blob dir to get them out of the
         # uploads dir.
         chunks = []
-        for i in range(1, upload.count+1):
+        for i in range(1, upload.count + 1):
             src_path = os.path.join(namespace, 'uploads', uuid, str(i))
             dst_path = os.path.join(namespace, 'blobs', digest, str(i))
             chunks.append(dst_path)
@@ -271,7 +275,8 @@ class Storage:
         self.log.debug('Get layers %s', path)
         data = self.backend.get_object(path)
         manifest = json.loads(data)
-        target = manifest.get('application/vnd.docker.distribution.manifest.v2+json')
+        target = manifest.get(
+            'application/vnd.docker.distribution.manifest.v2+json')
         layers = []
         if not target:
             self.log.debug('Unknown manifest %s', path)

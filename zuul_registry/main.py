@@ -31,6 +31,7 @@ DRIVERS = {
     'swift': swift.Driver,
 }
 
+
 class Authorization:
     def __init__(self, users):
         self.ro = {}
@@ -51,6 +52,7 @@ class Authorization:
         if user not in store:
             return False
         return store[user] == password
+
 
 class RegistryAPI:
     """Registry API server.
@@ -125,9 +127,10 @@ class RegistryAPI:
         method = cherrypy.request.method
         uuid = self.storage.start_upload(namespace)
         self.log.info('Start upload %s %s uuid %s digest %s',
-                       method, repository, uuid, digest)
+                      method, repository, uuid, digest)
         res = cherrypy.response
-        res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (repository, uuid)
+        res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (
+            repository, uuid)
         res.headers['Docker-Upload-UUID'] = uuid
         res.headers['Range'] = '0-0'
         res.status = '202 Accepted'
@@ -140,11 +143,13 @@ class RegistryAPI:
         old_length, new_length = self.storage.upload_chunk(
             namespace, uuid, cherrypy.request.body)
         res = cherrypy.response
-        res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (repository, uuid)
+        res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (
+            repository, uuid)
         res.headers['Docker-Upload-UUID'] = uuid
         res.headers['Range'] = '0-%s' % (new_length,)
         res.status = '204 No Content'
-        self.log.info('Finish Upload chunk %s %s %s', repository, uuid, new_length)
+        self.log.info(
+            'Finish Upload chunk %s %s %s', repository, uuid, new_length)
 
     @cherrypy.expose
     @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})
@@ -217,8 +222,10 @@ class RegistryAPI:
         self.log.error('Manifest %s %s not found', repository, ref)
         return self.not_found()
 
+
 class RegistryServer:
     log = logging.getLogger("registry.server")
+
     def __init__(self, config_path):
         self.log.info("Loading config from %s", config_path)
         self._load_config(config_path)
@@ -297,6 +304,7 @@ class RegistryServer:
     def prune(self):
         self.store.prune()
 
+
 def main():
     parser = argparse.ArgumentParser(
         description='Zuul registry server')
@@ -321,7 +329,7 @@ def main():
     logging.getLogger("urllib3").setLevel(logging.DEBUG)
     logging.getLogger("stevedore").setLevel(logging.INFO)
     logging.getLogger("openstack").setLevel(logging.DEBUG)
-    #cherrypy.log.error_log.propagate = False
+    # cherrypy.log.error_log.propagate = False
 
     s = RegistryServer(args.config)
     if args.command == 'serve':

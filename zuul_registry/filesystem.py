@@ -14,16 +14,15 @@
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import time
 
 from . import storageutils
+
 
 class FilesystemDriver(storageutils.StorageDriver):
     def __init__(self, conf):
         self.root = conf['root']
 
     def list_objects(self, path):
-        now = time.time()
         path = os.path.join(self.root, path)
         if not os.path.isdir(path):
             return []
@@ -87,5 +86,6 @@ class FilesystemDriver(storageutils.StorageDriver):
         for chunk_path in chunks:
             chunk_path = os.path.join(self.root, chunk_path)
             os.unlink(chunk_path)
+
 
 Driver = FilesystemDriver
