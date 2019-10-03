@@ -15,10 +15,10 @@
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
 rm -fr /tmp/storage
-docker rmi localhost:9000/zuul/registry
+docker rmi localhost:9000/test/registry
 docker image prune -f
 docker load <registry.img
-docker image push localhost:9000/zuul/registry
-docker rmi localhost:9000/zuul/registry
+docker image push localhost:9000/test/registry
+docker rmi localhost:9000/test/registry
 docker image prune -f
-docker image pull localhost:9000/zuul/registry
+docker image pull localhost:9000/test/registry
