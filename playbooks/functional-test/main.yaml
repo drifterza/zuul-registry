@@ -25,10 +25,10 @@
   command: docker image ls --all --digests --no-trunc
 
 - name: Pull the test image from Docker Hub
-  command: docker pull registry
+  command: docker pull alpine
 
 - name: Tag the test image with a realistic name
-  command: docker tag registry localhost:9000/test/registry
+  command: docker tag alpine localhost:9000/test/registry
 
 - name: Log in to local registry
   command: docker login localhost:9000 -u testuser -p testpass
@@ -41,7 +41,7 @@
   command: docker rmi localhost:9000/test/registry
 
 - name: Remove the test image from the local cache
-  command: docker rmi registry
+  command: docker rmi alpine:latest
 
 - name: Clean up the local image cache
   command: docker image prune -f
