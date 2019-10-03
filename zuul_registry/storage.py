@@ -139,6 +139,11 @@ class Storage:
         path = os.path.join(namespace, 'blobs', digest, 'data')
         return self.backend.get_object(path)
 
+    def stream_blob(self, namespace, digest):
+        path = os.path.join(namespace, 'blobs',
+                            self._path_from_digest(digest), 'data')
+        return self.backend.stream_object(path)
+
     def start_upload(self, namespace):
         """Start an upload.
 

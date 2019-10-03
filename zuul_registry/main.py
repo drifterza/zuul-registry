@@ -106,19 +106,28 @@ class RegistryAPI:
 
     @cherrypy.expose
     @cherrypy.config(**{'tools.auth_basic.checkpassword': require_read})
-    def get_blob(self, repository, digest):
+    def head_blob(self, repository, digest):
         namespace = self.get_namespace()
-        method = cherrypy.request.method
-        self.log.info('%s blob %s %s', method, repository, digest)
+        self.log.info('Head blob %s %s', repository, digest)
         size = self.storage.blob_size(namespace, digest)
         if size is None:
             return self.not_found()
         res = cherrypy.response
         res.headers['Docker-Content-Digest'] = digest
-        if method != 'HEAD':
-            data = self.storage.get_blob(namespace, digest)
-            return data
         return {}
+
+    @cherrypy.expose
+    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_read,
+                        'response.stream': True})
+    def get_blob(self, repository, digest):
+        namespace = self.get_namespace()
+        self.log.info('Get blob %s %s', repository, digest)
+        size = self.storage.blob_size(namespace, digest)
+        if size is None:
+            return self.not_found()
+        res = cherrypy.response
+        res.headers['Docker-Content-Digest'] = digest
+        return self.storage.stream_blob(namespace, digest)
 
     @cherrypy.expose
     @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})
@@ -260,6 +269,10 @@ class RegistryServer:
                           conditions=dict(method=['GET']),
                           controller=api, action='get_manifest')
         route_map.connect('api', '/v2/{repository:.*}/blobs/{digest}',
+                          conditions=dict(method=['HEAD']),
+                          controller=api, action='head_blob')
+        route_map.connect('api', '/v2/{repository:.*}/blobs/{digest}',
+                          conditions=dict(method=['GET']),
                           controller=api, action='get_blob')
 
         conf = {

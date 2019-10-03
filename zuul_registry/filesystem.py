@@ -57,6 +57,17 @@ class FilesystemDriver(storageutils.StorageDriver):
         with open(path, 'rb') as f:
             return f.read()
 
+    def stream_object(self, path):
+        path = os.path.join(self.root, path)
+        if not os.path.exists(path):
+            return None
+        with open(path, 'rb') as f:
+            while True:
+                chunk = f.read(4096)
+                if not chunk:
+                    return
+                yield chunk
+
     def delete_object(self, path):
         path = os.path.join(self.root, path)
         if os.path.exists(path):

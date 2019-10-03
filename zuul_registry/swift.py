@@ -120,6 +120,14 @@ class SwiftDriver(storageutils.StorageDriver):
             return None
         return ret.content
 
+    def stream_object(self, path):
+        try:
+            ret = retry_function(
+                lambda: self.conn.session.get(self.get_url(path), stream=True))
+        except keystoneauth1.exceptions.http.NotFound:
+            return None
+        return ret.iter_content(chunk_size=4096)
+
     def delete_object(self, path):
         retry_function(
             lambda: self.conn.session.delete(

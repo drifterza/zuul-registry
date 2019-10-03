@@ -92,6 +92,19 @@ class StorageDriver(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def stream_object(self, path):
+        """Retrieve an object, streaming.
+
+        Return a generator with the content of the object at `path`.
+
+        :arg str path: The object path.
+
+        :returns: The contents of the object.
+        :rtype: generator of bytearray
+        """
+        pass
+
+    @abstractmethod
     def delete_object(self, path):
         """Delete an object.
 
