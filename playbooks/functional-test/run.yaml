@@ -8,11 +8,18 @@
     workspace: /tmp/registry-test
     local: false
   tasks:
+    - name: Add project atomic PPA
+      apt_repository:
+        repo: ppa:projectatomic/ppa
+      become: true
+
     - name: Install packages
       package:
         name:
           - docker-compose
           - openssl
+          - skopeo
+          - buildah
         state: present
       become: true
     - name: Run main tasks

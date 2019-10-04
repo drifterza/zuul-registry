@@ -172,7 +172,7 @@ class RegistryAPI:
         res.headers['Location'] = '/v2/%s/blobs/%s' % (repository, digest)
         res.headers['Docker-Content-Digest'] = digest
         res.headers['Content-Range'] = '%s-%s' % (old_length, new_length)
-        res.status = '204 No Content'
+        res.status = '201 Created'
 
     @cherrypy.expose
     @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})

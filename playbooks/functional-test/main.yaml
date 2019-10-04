@@ -54,3 +54,15 @@
 
 - name: Print list of images
   command: docker image ls --all --digests --no-trunc
+
+- name: Create a local containers/image
+  shell: buildah commit --rm $(buildah from scratch) local-test
+
+- name: Check the local image is there
+  command: skopeo inspect containers-storage:localhost/local-test:latest
+
+- name: Copy the local image to the registry
+  command: >
+    skopeo copy --dest-creds testuser:testpass --dest-tls-verify=false
+      containers-storage:localhost/local-test:latest
+      docker://127.0.0.1:9000/test
