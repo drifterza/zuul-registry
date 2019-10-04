@@ -26,6 +26,7 @@ import dateutil.parser
 from . import storageutils
 
 POST_ATTEMPTS = 3
+SWIFT_CHUNK_SIZE = 64 * 1024
 
 
 def retry_function(func):
@@ -125,8 +126,12 @@ class SwiftDriver(storageutils.StorageDriver):
             ret = retry_function(
                 lambda: self.conn.session.get(self.get_url(path), stream=True))
         except keystoneauth1.exceptions.http.NotFound:
-            return None
-        return ret.iter_content(chunk_size=4096)
+            return None, None
+        try:
+            size = int(ret.headers.get('Content-Length', ''))
+        except ValueError:
+            size = None
+        return size, ret.iter_content(chunk_size=SWIFT_CHUNK_SIZE)
 
     def delete_object(self, path):
         retry_function(

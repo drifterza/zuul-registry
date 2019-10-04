@@ -114,6 +114,7 @@ class RegistryAPI:
             return self.not_found()
         res = cherrypy.response
         res.headers['Docker-Content-Digest'] = digest
+        res.headers['Content-Length'] = str(size)
         return {}
 
     @cherrypy.expose
@@ -122,12 +123,14 @@ class RegistryAPI:
     def get_blob(self, repository, digest):
         namespace = self.get_namespace()
         self.log.info('Get blob %s %s', repository, digest)
-        size = self.storage.blob_size(namespace, digest)
-        if size is None:
+        size, data_iter = self.storage.stream_blob(namespace, digest)
+        if data_iter is None:
             return self.not_found()
         res = cherrypy.response
         res.headers['Docker-Content-Digest'] = digest
-        return self.storage.stream_blob(namespace, digest)
+        if size is not None:
+            res.headers['Content-Length'] = str(size)
+        return data_iter
 
     @cherrypy.expose
     @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})

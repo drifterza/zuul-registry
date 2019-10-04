@@ -18,6 +18,9 @@ import os
 from . import storageutils
 
 
+DISK_CHUNK_SIZE = 64 * 1024
+
+
 class FilesystemDriver(storageutils.StorageDriver):
     def __init__(self, conf):
         self.root = conf['root']
@@ -60,13 +63,33 @@ class FilesystemDriver(storageutils.StorageDriver):
     def stream_object(self, path):
         path = os.path.join(self.root, path)
         if not os.path.exists(path):
-            return None
-        with open(path, 'rb') as f:
-            while True:
-                chunk = f.read(4096)
-                if not chunk:
-                    return
-                yield chunk
+            return None, None
+        f = open(path, 'rb', buffering=DISK_CHUNK_SIZE)
+        try:
+            size = os.fstat(f.fileno()).st_size
+        except OSError:
+            f.close()
+            raise
+
+        def data_iter(f=f):
+            with f:
+                yield b''  # will get discarded; see note below
+                yield from iter(lambda: f.read(DISK_CHUNK_SIZE), b'')
+
+        ret = data_iter()
+        # This looks a little funny, because it is. We're going to discard the
+        # empty bytes added at the start, but that's not the important part.
+        # We want to ensure that
+        #
+        #   1. the generator has started executing and
+        #   2. it left off *inside the with block*
+        #
+        # This ensures that when the generator gets cleaned up (either because
+        # everything went according to plan and the generator exited cleanly
+        # *or* there was an error which eventually raised a GeneratorExit),
+        # the file we opened will get closed.
+        next(ret)
+        return size, ret
 
     def delete_object(self, path):
         path = os.path.join(self.root, path)
