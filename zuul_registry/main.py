@@ -283,6 +283,7 @@ class RegistryServer:
         cherrypy.config.update({
             'global': {
                 'environment': 'production',
+                'server.max_request_body_size': 1e12,
                 'server.socket_host': self.conf['address'],
                 'server.socket_port': self.conf['port'],
                 'tools.auth_basic.on': True,
