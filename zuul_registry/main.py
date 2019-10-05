@@ -14,6 +14,7 @@
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
+import os
 import sys
 import logging
 import cherrypy
@@ -332,10 +333,11 @@ def main():
                         help='Command: serve, prune',
                         default='serve')
     args = parser.parse_args()
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
+    logformat = '%(levelname)s %(name)s: %(message)s'
+    if args.debug or os.environ.get('DEBUG') == '1':
+        logging.basicConfig(level=logging.DEBUG, format=logformat)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, format=logformat)
         cherrypy.log.access_log.propagate = False
     logging.getLogger("requests").setLevel(logging.DEBUG)
     logging.getLogger("keystoneauth").setLevel(logging.ERROR)
