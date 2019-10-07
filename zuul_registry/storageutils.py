@@ -99,8 +99,8 @@ class StorageDriver(metaclass=ABCMeta):
 
         :arg str path: The object path.
 
-        :returns: The contents of the object.
-        :rtype: generator of bytearray
+        :returns: The size and contents of the object.
+        :rtype: tuple of (int or None, generator-of-bytearray or None)
         """
         pass
 
