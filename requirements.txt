@@ -7,3 +7,4 @@ requests
 openstacksdk
 python-dateutil
 rehash
+pyjwt
