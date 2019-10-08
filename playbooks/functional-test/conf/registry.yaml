@@ -3,13 +3,11 @@ registry:
   port: 9000
   tls-cert: /tls/cert.pem
   tls-key: /tls/cert.key
+  secret: test_token_secret
   users:
     - name: testuser
       pass: testpass
       access: write
-    - name: anonymous
-      pass: ''
-      access: read
   storage:
     driver: filesystem
     root: /storage

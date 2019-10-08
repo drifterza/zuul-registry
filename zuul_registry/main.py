@@ -14,6 +14,7 @@
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
+import base64
 import os
 import sys
 import logging
@@ -27,32 +28,106 @@ from . import filesystem
 from . import storage
 from . import swift
 
+import jwt
+
 DRIVERS = {
     'filesystem': filesystem.Driver,
     'swift': swift.Driver,
 }
 
 
-class Authorization:
-    def __init__(self, users):
-        self.ro = {}
+class Authorization(cherrypy.Tool):
+    log = logging.getLogger("registry.authz")
+    READ = 'read'
+    WRITE = 'write'
+    AUTH = 'auth'
+
+    def __init__(self, secret, users):
+        self.secret = secret
         self.rw = {}
 
         for user in users:
-            if user['access'] == 'write':
+            if user['access'] == self.WRITE:
                 self.rw[user['name']] = user['pass']
-            self.ro[user['name']] = user['pass']
 
-    def require_write(self, realm, user, password):
-        return self.check(self.rw, user, password)
-
-    def require_read(self, realm, user, password):
-        return self.check(self.ro, user, password)
+        cherrypy.Tool.__init__(self, 'before_handler',
+                               self.check_auth,
+                               priority=1)
 
     def check(self, store, user, password):
         if user not in store:
             return False
         return store[user] == password
+
+    def unauthorized(self):
+        cherrypy.response.headers['www-authenticate'] = (
+            'Bearer realm="https://localhost:9000/auth/token"'
+        )
+        raise cherrypy.HTTPError(401, 'Authentication required')
+
+    def check_auth(self, level=READ):
+        auth_header = cherrypy.request.headers.get('authorization')
+        if auth_header and 'Bearer' in auth_header:
+            token = auth_header.split()[1]
+            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+            if payload.get('level') in [level, self.WRITE]:
+                self.log.debug('Auth ok %s', level)
+                return
+        self.log.debug('Unauthorized %s', level)
+        self.unauthorized()
+
+    def _get_level(self, scope):
+        level = None
+        for resource_scope in scope.split(' '):
+            parts = resource_scope.split(':')
+            if parts[0] == 'repository' and 'push' in parts[2]:
+                level = self.WRITE
+            if (parts[0] == 'repository' and 'pull' in parts[2]
+                and level is None):
+                level = self.READ
+        if level is None:
+            # No scope was provided, so this is an authentication
+            # request; treat it as requesting 'write' access so that
+            # we validate the password.
+            level = self.WRITE
+        return level
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out(content_type='application/json; charset=utf-8')
+    def token(self, **kw):
+        # If the scope of the token requested is for pushing an image,
+        # that corresponds to 'write' level access, so we verify the
+        # password.
+        #
+        # If the scope of the token is not specified, we treat it as
+        # 'write' since it probably means the client is performing
+        # login validation.  The _get_level method takes care of that.
+        #
+        # If the scope requested is for pulling an image, we always
+        # grant a read-level token.  This covers the case where no
+        # authentication credentials are supplied, and also an
+        # interesting edge case: the docker client, when configured
+        # with a registry mirror, will, bless it's little heart, send
+        # the *docker hub* credentials to that mirror.  In order for
+        # us to act as a a stand-in for docker hub, we need to accept
+        # those credentials.
+        auth_header = cherrypy.request.headers.get('authorization')
+        level = self._get_level(kw.get('scope', ''))
+        self.log.info('Authenticate level %s', level)
+        if level == self.WRITE:
+            if auth_header and 'Basic' in auth_header:
+                cred = auth_header.split()[1]
+                cred = base64.decodebytes(cred.encode('utf8')).decode('utf8')
+                user, pw = cred.split(':')
+                if not self.check(self.rw, user, pw):
+                    self.unauthorized()
+            else:
+                self.unauthorized()
+        self.log.debug('Generate %s token', level)
+        token = jwt.encode({'level': level}, 'secret',
+                           algorithm='HS256').decode('utf8')
+        return {'token': token,
+                'access_token': token}
 
 
 class RegistryAPI:
@@ -67,15 +142,6 @@ class RegistryAPI:
         self.storage = store
         self.authz = authz
         self.shadow = None
-
-    # These are used in a decorator; they dispatch to the
-    # Authorization method of the same name.  The eventual deferenced
-    # object is the instance of this class.
-    def require_write(*args):
-        return cherrypy.request.app.root.authz.require_write(*args)
-
-    def require_read(*args):
-        return cherrypy.request.app.root.authz.require_read(*args)
 
     def get_namespace(self):
         if not self.shadow:
@@ -98,7 +164,6 @@ class RegistryAPI:
 
     @cherrypy.expose
     @cherrypy.tools.json_out(content_type='application/json; charset=utf-8')
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_read})
     def version_check(self):
         self.log.info('Version check')
         return {'version': '1.0'}
@@ -106,7 +171,6 @@ class RegistryAPI:
         res.headers['Distribution-API-Version'] = 'registry/2.0'
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_read})
     def head_blob(self, repository, digest):
         namespace = self.get_namespace()
         self.log.info('Head blob %s %s', repository, digest)
@@ -118,8 +182,7 @@ class RegistryAPI:
         return {}
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_read,
-                        'response.stream': True})
+    @cherrypy.config(**{'response.stream': True})
     def get_blob(self, repository, digest):
         namespace = self.get_namespace()
         self.log.info('Get blob %s %s', repository, digest)
@@ -131,7 +194,7 @@ class RegistryAPI:
         return self.storage.stream_blob(namespace, digest)
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})
+    @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def start_upload(self, repository, digest=None):
         namespace = self.get_namespace()
         method = cherrypy.request.method
@@ -146,7 +209,7 @@ class RegistryAPI:
         res.status = '202 Accepted'
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})
+    @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def upload_chunk(self, repository, uuid):
         self.log.info('Upload chunk %s %s', repository, uuid)
         namespace = self.get_namespace()
@@ -162,7 +225,7 @@ class RegistryAPI:
             'Finish Upload chunk %s %s %s', repository, uuid, new_length)
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})
+    @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def finish_upload(self, repository, uuid, digest):
         self.log.info('Finish upload %s %s', repository, uuid)
         namespace = self.get_namespace()
@@ -176,7 +239,7 @@ class RegistryAPI:
         res.status = '201 Created'
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_write})
+    @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def put_manifest(self, repository, ref):
         namespace = self.get_namespace()
         body = cherrypy.request.body.read()
@@ -199,7 +262,6 @@ class RegistryAPI:
         res.status = '201 Created'
 
     @cherrypy.expose
-    @cherrypy.config(**{'tools.auth_basic.checkpassword': require_read})
     def get_manifest(self, repository, ref):
         namespace = self.get_namespace()
         headers = cherrypy.request.headers
@@ -249,10 +311,11 @@ class RegistryServer:
         backend = DRIVERS[driver](self.conf['storage'])
         self.store = storage.Storage(backend, self.conf['storage'])
 
-        authz = Authorization(self.conf['users'])
+        authz = Authorization(self.conf['secret'], self.conf['users'])
 
         route_map = cherrypy.dispatch.RoutesDispatcher()
         api = RegistryAPI(self.store, authz)
+        cherrypy.tools.check_auth = authz
         route_map.connect('api', '/v2/',
                           controller=api, action='version_check')
         route_map.connect('api', '/v2/{repository:.*}/blobs/uploads/',
@@ -275,21 +338,25 @@ class RegistryServer:
         route_map.connect('api', '/v2/{repository:.*}/blobs/{digest}',
                           conditions=dict(method=['GET']),
                           controller=api, action='get_blob')
+        route_map.connect('authz', '/auth/token',
+                          controller=authz, action='token')
 
         conf = {
             '/': {
-                'request.dispatch': route_map
+                'request.dispatch': route_map,
+                'tools.check_auth.on': True,
+            },
+            '/auth': {
+                'tools.check_auth.on': False,
             }
         }
+
         cherrypy.config.update({
             'global': {
                 'environment': 'production',
                 'server.max_request_body_size': 1e12,
                 'server.socket_host': self.conf['address'],
                 'server.socket_port': self.conf['port'],
-                'tools.auth_basic.on': True,
-                'tools.auth_basic.realm': 'Registry',
-                'tools.auth_basic.accept_charset': 'UTF-8',
             },
         })
 
