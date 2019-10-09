@@ -291,6 +291,10 @@ class RegistryAPI:
                 self.log.debug('Manifest %s %s digest found %s',
                                repository, ref, manifest[ct])
                 data = self.storage.get_blob(namespace, manifest[ct])
+                if not data:
+                    self.log.error(
+                        'Blob %s %s not found', namespace, manifest[ct])
+                    return self.not_found()
                 res.headers['Content-Type'] = ct
                 res.headers['Docker-Content-Digest'] = manifest[ct]
                 hasher = hashlib.sha256()
