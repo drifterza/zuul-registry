@@ -20,10 +20,15 @@
           - openssl
           - skopeo
           - buildah
+          - podman
         state: present
       become: true
-    - name: Run main tasks
-      include_tasks: main.yaml
+    - name: Run setup tasks
+      include_tasks: setup.yaml
+    - name: Run docker test tasks
+      include_tasks: docker.yaml
+    - name: Run podman test tasks
+      include_tasks: podman.yaml
 
 # If buildset_registry is defined, that means a parent job is running it;
 # only if it is not defined does it mean that we are running it.  If we

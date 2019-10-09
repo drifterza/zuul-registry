@@ -1,0 +1,58 @@
+# Test push and pull from the standard registry
+
+- name: Start the standard registry
+  shell:
+    cmd: docker-compose -f standard-compose.yaml up -d
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'test/image' in image_list.stdout"
+
+- name: Copy the test image into local containers image storage
+  command: >
+    skopeo copy
+      docker-archive:{{ workspace }}/test.img
+      containers-storage:localhost:9000/test/image:latest
+
+- name: Log in to registry
+  command: podman login localhost:9000 -u testuser -p testpass
+
+- name: Push the test image to the standard registry
+  command: podman push localhost:9000/test/image
+
+- name: Remove the test image from the local cache
+  command: podman rmi localhost:9000/test/image
+
+- name: Clean up the local image cache
+  command: podman image prune
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'test/image' in image_list.stdout"
+
+- name: Pull the image from the standard registry
+  command: podman pull localhost:9000/test/image
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'test/image' not in image_list.stdout"
+
+- name: Try to pull an image that does not exist
+  command: podman pull localhost:9000/test/dne
+  register: result
+  failed_when: result.rc != 125
+
+- name: Stop the standard registry
+  shell:
+    cmd: docker-compose -f standard-compose.yaml down
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Clean up podman volumes
+  command: podman volume prune -f
+
+- name: Log out of registry
+  command: podman logout localhost:9000

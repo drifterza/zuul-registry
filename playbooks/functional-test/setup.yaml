@@ -1,0 +1,42 @@
+- name: Create workspace directory
+  file:
+    state: directory
+    path: "{{ workspace }}"
+
+- name: Create storage directory
+  file:
+    state: directory
+    path: "{{ workspace }}/storage"
+
+- name: Create TLS directory
+  file:
+    state: directory
+    path: "{{ workspace }}/tls"
+
+- name: Generate a TLS key for the registry
+  command: "openssl req -x509 -newkey rsa:2048 -keyout {{ workspace }}/tls/cert.key -out {{ workspace }}/tls/cert.pem -days 365 -nodes -subj '/C=US/ST=California/L=Oakland/O=Company Name/OU=Org/CN=localhost' -addext 'subjectAltName = DNS:localhost,IP:127.0.0.1'"
+
+- name: Install the CA cert
+  command: "cp {{ workspace }}/tls/cert.pem /usr/local/share/ca-certificates/test.crt"
+  become: true
+
+- name: Update CA certs
+  command: update-ca-certificates
+  become: true
+
+- name: Create a local containers image
+  shell: buildah commit --rm $(buildah from scratch) testimage
+
+- name: Ensure image file is not present
+  file:
+    path: "{{ workspace }}/test.img"
+    state: absent
+
+- name: Copy the local image to a file
+  command: >
+    skopeo copy
+      containers-storage:localhost/testimage:latest
+      docker-archive:{{ workspace }}/test.img
+
+- name: Remove test image from containers storage
+  command: podman rmi localhost/testimage:latest
