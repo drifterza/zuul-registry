@@ -42,8 +42,9 @@ class Authorization(cherrypy.Tool):
     WRITE = 'write'
     AUTH = 'auth'
 
-    def __init__(self, secret, users):
+    def __init__(self, secret, users, public_url):
         self.secret = secret
+        self.public_url = public_url
         self.rw = {}
 
         for user in users:
@@ -61,7 +62,7 @@ class Authorization(cherrypy.Tool):
 
     def unauthorized(self):
         cherrypy.response.headers['www-authenticate'] = (
-            'Bearer realm="https://localhost:9000/auth/token"'
+            'Bearer realm="%s/auth/token"' % (self.public_url,)
         )
         raise cherrypy.HTTPError(401, 'Authentication required')
 
@@ -78,7 +79,9 @@ class Authorization(cherrypy.Tool):
 
     def _get_level(self, scope):
         level = None
-        for resource_scope in scope.split(' '):
+        if not isinstance(scope, list):
+            scope = scope.split(' ')
+        for resource_scope in scope:
             parts = resource_scope.split(':')
             if parts[0] == 'repository' and 'push' in parts[2]:
                 level = self.WRITE
@@ -314,7 +317,8 @@ class RegistryServer:
         backend = DRIVERS[driver](self.conf['storage'])
         self.store = storage.Storage(backend, self.conf['storage'])
 
-        authz = Authorization(self.conf['secret'], self.conf['users'])
+        authz = Authorization(self.conf['secret'], self.conf['users'],
+                              self.conf['public-url'])
 
         route_map = cherrypy.dispatch.RoutesDispatcher()
         api = RegistryAPI(self.store, authz)
