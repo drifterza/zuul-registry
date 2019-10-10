@@ -9,6 +9,8 @@
       include_tasks: docker.yaml
     - name: Run docker buildset test tasks
       include_tasks: docker-buildset.yaml
+    - name: Run docker buildset test tasks
+      include_tasks: podman-buildset.yaml
     - name: Run podman test tasks
       include_tasks: podman.yaml
     - name: Run cleanup tasks
