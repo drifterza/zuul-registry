@@ -1,0 +1,25 @@
+- name: Restore docker daemon configuration
+  when: daemon_config_stat.stat.exists
+  command: "cp {{ workspace }}/docker-daemon.json /etc/docker/daemon.json"
+  become: true
+
+- name: Remove docker daemon configuration
+  when: not daemon_config_stat.stat.exists
+  command: "rm /etc/docker/daemon.json"
+  become: true
+
+- name: Restart docker daemon
+  service:
+    name: docker
+    state: restarted
+  become: true
+  register: docker_restart
+  failed_when: docker_restart is failed and not 'Could not find the requested service' in docker_restart.msg
+
+- name: Restore docker user configuration
+  when: user_config_stat.stat.exists
+  command: "cp {{ workspace }}/docker-user.json ~/.docker/config.json"
+
+- name: Remove docker user configuration
+  when: not user_config_stat.stat.exists
+  command: "rm ~/.docker/config.json"

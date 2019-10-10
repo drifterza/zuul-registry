@@ -25,9 +25,6 @@
 - name: Remove the test image from the local cache
   command: docker rmi localhost:9000/test/image
 
-- name: Clean up the local image cache
-  command: docker image prune -f
-
 - name: Print list of images
   command: docker image ls --all --digests --no-trunc
   register: image_list
@@ -45,6 +42,9 @@
   command: docker pull localhost:9000/test/dne
   register: result
   failed_when: result.rc != 1
+
+- name: Remove the test image from the local cache
+  command: docker rmi localhost:9000/test/image
 
 - name: Stop the standard registry
   shell:

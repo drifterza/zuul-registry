@@ -4,15 +4,18 @@
     - build-docker-image
 
 - hosts: all
+  name: Set up for tests
   vars:
-    workspace: /tmp/registry-test
-    local: false
   tasks:
+    # Set facts here to apply to all plays below
+    - name: Set variables for all tests
+      set_fact:
+        workspace: /tmp/registry-test
+        local: false
     - name: Add project atomic PPA
       apt_repository:
         repo: ppa:projectatomic/ppa
       become: true
-
     - name: Install packages
       package:
         name:
@@ -25,10 +28,30 @@
       become: true
     - name: Run setup tasks
       include_tasks: setup.yaml
+
+- hosts: all
+  name: Run docker standard registry test
+  tasks:
     - name: Run docker test tasks
       include_tasks: docker.yaml
+
+- hosts: all
+  name: Run podman standard registry test
+  tasks:
     - name: Run podman test tasks
       include_tasks: podman.yaml
+
+- hosts: all
+  name: Run docker buildset registry test
+  tasks:
+    - name: Run docker buildset test tasks
+      include_tasks: docker-buildset.yaml
+
+- hosts: all
+  name: Clean up after tests
+  tasks:
+    - name: Run cleanup tasks
+      include_tasks: cleanup.yaml
 
 # If buildset_registry is defined, that means a parent job is running it;
 # only if it is not defined does it mean that we are running it.  If we
