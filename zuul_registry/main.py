@@ -21,7 +21,6 @@ import logging
 import cherrypy
 import hashlib
 import json
-import urllib
 import yaml
 
 from . import filesystem
@@ -140,30 +139,21 @@ class RegistryAPI:
     https://docs.docker.com/registry/spec/api/
     """
     log = logging.getLogger("registry.api")
+    DEFAULT_NAMESPACE = '_local'
 
-    def __init__(self, store, authz):
+    def __init__(self, store, namespaced, authz):
         self.storage = store
         self.authz = authz
-        self.shadow = None
+        self.namespaced = namespaced
 
-    def get_namespace(self):
-        if not self.shadow:
-            return '_local'
-        return cherrypy.request.headers['Host']
+    def get_namespace(self, repository):
+        if not self.namespaced:
+            return (self.DEFAULT_NAMESPACE, repository)
+        parts = repository.split('/')
+        return (parts[0], '/'.join(parts[1:]))
 
     def not_found(self):
-        if not self.shadow:
-            raise cherrypy.HTTPError(404)
-        # TODO: Proxy the request (this is where we implement the
-        # buildset registry functionality).
-        host = cherrypy.request.headers['Host']
-        method = cherrypy.request.method
-        path = cherrypy.request.path_info
-        url = self.shadow.get(host)
-        if not url:
-            raise cherrypy.HTTPError(404)
-        url = urllib.parse.urljoin(url, path)
-        self.log.debug("Proxy request %s %s", method, url)
+        raise cherrypy.HTTPError(404)
 
     @cherrypy.expose
     @cherrypy.tools.json_out(content_type='application/json; charset=utf-8')
@@ -175,8 +165,8 @@ class RegistryAPI:
 
     @cherrypy.expose
     def head_blob(self, repository, digest):
-        namespace = self.get_namespace()
-        self.log.info('Head blob %s %s', repository, digest)
+        namespace, repository = self.get_namespace(repository)
+        self.log.info('Head blob %s %s %s', namespace, repository, digest)
         size = self.storage.blob_size(namespace, digest)
         if size is None:
             return self.not_found()
@@ -188,8 +178,8 @@ class RegistryAPI:
     @cherrypy.expose
     @cherrypy.config(**{'response.stream': True})
     def get_blob(self, repository, digest):
-        namespace = self.get_namespace()
-        self.log.info('Get blob %s %s', repository, digest)
+        namespace, repository = self.get_namespace(repository)
+        self.log.info('Get blob %s %s %s', namespace, repository, digest)
         size, data_iter = self.storage.stream_blob(namespace, digest)
         if data_iter is None:
             return self.not_found()
@@ -202,14 +192,15 @@ class RegistryAPI:
     @cherrypy.expose
     @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def start_upload(self, repository, digest=None):
-        namespace = self.get_namespace()
+        orig_repository = repository
+        namespace, repository = self.get_namespace(repository)
         method = cherrypy.request.method
         uuid = self.storage.start_upload(namespace)
-        self.log.info('Start upload %s %s uuid %s digest %s',
-                      method, repository, uuid, digest)
+        self.log.info('Start upload %s %s %s uuid %s digest %s',
+                      method, namespace, repository, uuid, digest)
         res = cherrypy.response
         res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (
-            repository, uuid)
+            orig_repository, uuid)
         res.headers['Docker-Upload-UUID'] = uuid
         res.headers['Range'] = '0-0'
         res.status = '202 Accepted'
@@ -217,13 +208,14 @@ class RegistryAPI:
     @cherrypy.expose
     @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def upload_chunk(self, repository, uuid):
-        self.log.info('Upload chunk %s %s', repository, uuid)
-        namespace = self.get_namespace()
+        orig_repository = repository
+        namespace, repository = self.get_namespace(repository)
+        self.log.info('Upload chunk %s %s %s', namespace, repository, uuid)
         old_length, new_length = self.storage.upload_chunk(
             namespace, uuid, cherrypy.request.body)
         res = cherrypy.response
         res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (
-            repository, uuid)
+            orig_repository, uuid)
         res.headers['Docker-Upload-UUID'] = uuid
         res.headers['Range'] = '0-%s' % (new_length,)
         res.status = '204 No Content'
@@ -233,13 +225,14 @@ class RegistryAPI:
     @cherrypy.expose
     @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def finish_upload(self, repository, uuid, digest):
-        self.log.info('Finish upload %s %s', repository, uuid)
-        namespace = self.get_namespace()
+        orig_repository = repository
+        namespace, repository = self.get_namespace(repository)
+        self.log.info('Finish upload %s %s %s', namespace, repository, uuid)
         old_length, new_length = self.storage.upload_chunk(
             namespace, uuid, cherrypy.request.body)
         self.storage.store_upload(namespace, uuid, digest)
         res = cherrypy.response
-        res.headers['Location'] = '/v2/%s/blobs/%s' % (repository, digest)
+        res.headers['Location'] = '/v2/%s/blobs/%s' % (orig_repository, digest)
         res.headers['Docker-Content-Digest'] = digest
         res.headers['Content-Range'] = '%s-%s' % (old_length, new_length)
         res.status = '201 Created'
@@ -247,12 +240,13 @@ class RegistryAPI:
     @cherrypy.expose
     @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def put_manifest(self, repository, ref):
-        namespace = self.get_namespace()
+        namespace, repository = self.get_namespace(repository)
         body = cherrypy.request.body.read()
         hasher = hashlib.sha256()
         hasher.update(body)
         digest = 'sha256:' + hasher.hexdigest()
-        self.log.info('Put manifest %s %s digest %s', repository, ref, digest)
+        self.log.info('Put manifest %s %s %s digest %s',
+                      namespace, repository, ref, digest)
         self.storage.put_blob(namespace, digest, body)
         manifest = self.storage.get_manifest(namespace, repository, ref)
         if manifest is None:
@@ -269,10 +263,10 @@ class RegistryAPI:
 
     @cherrypy.expose
     def get_manifest(self, repository, ref):
-        namespace = self.get_namespace()
+        namespace, repository = self.get_namespace(repository)
         headers = cherrypy.request.headers
         res = cherrypy.response
-        self.log.info('Get manifest %s %s', repository, ref)
+        self.log.info('Get manifest %s %s %s', namespace, repository, ref)
         if ref.startswith('sha256:'):
             manifest = self.storage.get_blob(namespace, ref)
             if manifest is None:
@@ -325,8 +319,11 @@ class RegistryServer:
                               self.conf['public-url'])
 
         route_map = cherrypy.dispatch.RoutesDispatcher()
-        api = RegistryAPI(self.store, authz)
+        api = RegistryAPI(self.store,
+                          self.conf.get('namespaced', False),
+                          authz)
         cherrypy.tools.check_auth = authz
+
         route_map.connect('api', '/v2/',
                           controller=api, action='version_check')
         route_map.connect('api', '/v2/{repository:.*}/blobs/uploads/',
