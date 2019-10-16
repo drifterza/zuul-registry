@@ -3,5 +3,9 @@
     workspace: /tmp/registry-test
     local: true
   tasks:
-    - name: Run main tasks
-      include_tasks: main.yaml
+    - name: Run setup tasks
+      include_tasks: setup.yaml
+    - name: Run docker test tasks
+      include_tasks: docker.yaml
+    - name: Run podman test tasks
+      include_tasks: podman.yaml
