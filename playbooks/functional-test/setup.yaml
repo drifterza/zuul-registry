@@ -24,6 +24,25 @@
   command: update-ca-certificates
   become: true
 
+- name: Check if docker daemon configuration exists
+  stat:
+    path: /etc/docker/daemon.json
+  register: daemon_config_stat
+
+- name: Save docker daemon configuration
+  when: daemon_config_stat.stat.exists
+  command: "cp /etc/docker/daemon.json {{ workspace }}/docker-daemon.json"
+  become: true
+
+- name: Check if docker user configuration exists
+  stat:
+    path: ~/.docker/config.json
+  register: user_config_stat
+
+- name: Save docker user configuration
+  when: user_config_stat.stat.exists
+  command: "cp ~/.docker/config.json {{ workspace }}/docker-user.json"
+
 - name: Create a local containers image
   shell: buildah commit --rm $(buildah from scratch) testimage
 

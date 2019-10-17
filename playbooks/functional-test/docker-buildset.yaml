@@ -1,0 +1,93 @@
+# Test push and pull from the buildset registry
+
+- name: Create new docker daemon config
+  set_fact:
+    new_daemon_config:
+      registry-mirrors:
+        - "https://localhost:9000"
+
+- name: Write docker daemon configuration
+  copy:
+    content: "{{ new_daemon_config | to_nice_json }}"
+    dest: /etc/docker/daemon.json
+  become: true
+
+- name: Restart docker daemon
+  service:
+    name: docker
+    state: restarted
+  become: true
+  register: docker_restart
+  failed_when: docker_restart is failed and not 'Could not find the requested service' in docker_restart.msg
+
+- name: Start the standard registry
+  shell:
+    cmd: docker-compose -f standard-compose.yaml up -d
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Wait for registry to come up
+  uri:
+    url: https://localhost:9000/v2/
+    validate_certs: false
+    status_code: 401
+  register: result
+  until: result.status is defined and result.status == 401
+  delay: 1
+  retries: 120
+
+- name: Create new docker user config
+  set_fact:
+    new_user_config: {}
+
+- name: Write docker user configuration
+  copy:
+    content: "{{ new_user_config | to_nice_json }}"
+    dest: ~/.docker/config.json
+
+- name: Copy the test image into the buildset registry
+  command: >
+    skopeo copy --dest-creds testuser:testpass
+      docker-archive:{{ workspace }}/test.img
+      docker://localhost:9000/test/image:latest
+
+- name: Print list of images
+  command: docker image ls --all --digests --no-trunc
+  register: image_list
+  failed_when:
+    - "'test/image' in image_list.stdout"
+    - "'alpine' in image_list.stdout"
+
+- name: Pull the image from the buildset registry
+  command: docker pull test/image
+
+- name: Print list of images
+  command: docker image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'test/image' not in image_list.stdout"
+
+- name: Try to pull an image that does not exist
+  command: docker pull test/dne
+  register: result
+  failed_when: result.rc != 1
+
+- name: Pull an image from upstream
+  command: docker pull alpine
+
+- name: Print list of images
+  command: docker image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'alpine' not in image_list.stdout"
+
+- name: Remove the test image from the local cache
+  command: docker rmi test/image
+
+- name: Remove the test image from the local cache
+  command: docker rmi alpine
+
+- name: Stop the standard registry
+  shell:
+    cmd: docker-compose -f standard-compose.yaml down
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Clean up docker volumes
+  command: docker volume prune -f
