@@ -320,7 +320,7 @@ class RegistryServer:
 
         route_map = cherrypy.dispatch.RoutesDispatcher()
         api = RegistryAPI(self.store,
-                          self.conf.get('namespaced', False),
+                          False,
                           authz)
         cherrypy.tools.check_auth = authz
 
