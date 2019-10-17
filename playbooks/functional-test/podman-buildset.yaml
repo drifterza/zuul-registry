@@ -1,0 +1,113 @@
+# Test push and pull from the buildset registry
+
+- name: Create new registries.conf
+  copy:
+    dest: /etc/containers/registries.conf
+    src: files/registries.conf
+  become: true
+
+- name: Start the namespaced registry
+  shell:
+    cmd: docker-compose -f namespaced-compose.yaml up -d
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Wait for registry to come up
+  uri:
+    url: https://localhost:9000/v2/
+    validate_certs: false
+    status_code: 401
+  register: result
+  until: result.status is defined and result.status == 401
+  delay: 1
+  retries: 120
+
+- name: Create new docker user config
+  set_fact:
+    new_user_config: {}
+
+- name: Write docker user configuration
+  copy:
+    content: "{{ new_user_config | to_nice_json }}"
+    dest: ~/.docker/config.json
+
+- name: Write containers auth configuration
+  copy:
+    content: "{{ new_user_config | to_nice_json }}"
+    dest: "/run/user/{{ ansible_user_uid }}/auth.json"
+
+- name: Copy the test image into the buildset registry
+  command: >
+    skopeo copy --dest-creds testuser:testpass
+      docker-archive:{{ workspace }}/test.img
+      docker://localhost:9000/docker.io/test/image:latest
+
+- name: Copy the test image into the buildset registry
+  command: >
+    skopeo copy --dest-creds testuser:testpass
+      docker-archive:{{ workspace }}/test.img
+      docker://localhost:9000/quay.io/test/quay-image:latest
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when:
+    - "'test/image' in image_list.stdout"
+    - "'test/quay-image' in image_list.stdout"
+    - "'alpine' in image_list.stdout"
+
+- name: Pull the shadowed docker image from the buildset registry
+  command: podman pull test/image
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'docker.io/test/image' not in image_list.stdout"
+
+- name: Remove the test image from the local cache
+  command: podman rmi docker.io/test/image
+
+- name: Pull the shadowed quay image from the buildset registry
+  command: podman pull quay.io/test/quay-image
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'quay.io/test/quay-image' not in image_list.stdout"
+
+- name: Remove the test image from the local cache
+  command: podman rmi quay.io/test/quay-image
+
+- name: Try to pull an image that does not exist
+  command: podman pull test/dne
+  register: result
+  failed_when: result.rc != 125
+
+- name: Pull an image from docker.io
+  command: podman pull alpine
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'docker.io/library/alpine' not in image_list.stdout"
+
+- name: Remove the test image from the local cache
+  command: podman rmi docker.io/library/alpine
+
+- name: Pull an image from quay.io
+  command: podman pull quay.io/0xff/alpine-sshd
+
+- name: Print list of images
+  command: podman image ls --all --digests --no-trunc
+  register: image_list
+  failed_when: "'quay.io/0xff/alpine-sshd' not in image_list.stdout"
+
+- name: Remove the test image from the local cache
+  command: podman rmi quay.io/0xff/alpine-sshd
+
+- name: Stop the namespaced registry
+  shell:
+    cmd: docker-compose -f namespaced-compose.yaml down
+    chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
+
+- name: Clean up docker volumes
+  command: docker volume prune -f

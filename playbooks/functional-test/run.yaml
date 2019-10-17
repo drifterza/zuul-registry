@@ -48,6 +48,12 @@
       include_tasks: docker-buildset.yaml
 
 - hosts: all
+  name: Run podman buildset registry test
+  tasks:
+    - name: Run podman buildset test tasks
+      include_tasks: podman-buildset.yaml
+
+- hosts: all
   name: Clean up after tests
   tasks:
     - name: Run cleanup tasks

@@ -32,7 +32,6 @@
 - name: Save docker daemon configuration
   when: daemon_config_stat.stat.exists
   command: "cp /etc/docker/daemon.json {{ workspace }}/docker-daemon.json"
-  become: true
 
 - name: Check if docker user configuration exists
   stat:
@@ -42,6 +41,24 @@
 - name: Save docker user configuration
   when: user_config_stat.stat.exists
   command: "cp ~/.docker/config.json {{ workspace }}/docker-user.json"
+
+- name: Check if registries.conf exists
+  stat:
+    path: /etc/containers/registries.conf
+  register: registries_conf_stat
+
+- name: Save registries.conf
+  when: registries_conf_stat.stat.exists
+  command: "cp /etc/containers/registries.conf {{ workspace }}/registries.conf"
+
+- name: Check if containers user auth exists
+  stat:
+    path: "/run/user/{{ ansible_user_uid }}/auth.json"
+  register: containers_auth_stat
+
+- name: Save containers user auth
+  when: containers_auth_stat.stat.exists
+  command: "cp /run/user/{{ ansible_user_uid }}/auth.json {{ workspace }}/containers-auth.json"
 
 - name: Create a local containers image
   shell: buildah commit --rm $(buildah from scratch) testimage

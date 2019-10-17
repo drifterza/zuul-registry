@@ -23,3 +23,21 @@
 - name: Remove docker user configuration
   when: not user_config_stat.stat.exists
   command: "rm ~/.docker/config.json"
+
+- name: Restore registries.conf
+  when: registries_conf_stat.stat.exists
+  command: "cp {{ workspace }}/registries.conf /etc/containers/registries.conf"
+  become: true
+
+- name: Remove registries.conf
+  when: not registries_conf_stat.stat.exists
+  command: "rm /etc/containers/registries.conf"
+  become: true
+
+- name: Restore containers user auth
+  when: containers_auth_stat.stat.exists
+  command: "cp {{ workspace }}/containers-auth.json /run/user/{{ ansible_user_uid }}/auth.json"
+
+- name: Remove containers user auth
+  when: not containers_auth_stat.stat.exists
+  command: "rm /run/user/{{ ansible_user_uid }}/auth.json"
