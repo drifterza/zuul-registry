@@ -120,7 +120,7 @@ class Authorization(cherrypy.Tool):
             if auth_header and 'Basic' in auth_header:
                 cred = auth_header.split()[1]
                 cred = base64.decodebytes(cred.encode('utf8')).decode('utf8')
-                user, pw = cred.split(':')
+                user, pw = cred.split(':', 1)
                 if not self.check(self.rw, user, pw):
                     self.unauthorized()
             else:
