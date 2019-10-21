@@ -21,6 +21,7 @@
     parent: opendev-build-docker-image
     allowed-projects: zuul/zuul-registry
     run: playbooks/functional-test/run.yaml
+    post-run: playbooks/functional-test/post.yaml
     vars: &image_vars
       docker_images:
         - context: .
@@ -33,6 +34,7 @@
     description: Build and test a Docker image and upload to Docker Hub.
     allowed-projects: zuul/zuul-registry
     run: playbooks/functional-test/run.yaml
+    post-run: playbooks/functional-test/post.yaml
     secrets:
       name: docker_credentials
       secret: zuul-registry-dockerhub

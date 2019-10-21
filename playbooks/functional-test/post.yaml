@@ -1,0 +1,17 @@
+- hosts: all
+  tasks:
+    - name: List containers
+      command: "docker ps -a --format '{{ '{{ .Names }}' }}'"
+      register: docker_containers
+      ignore_errors: true
+
+    - name: Create container log dir
+      file:
+        path: "{{ ansible_user_dir }}/zuul-output/logs/docker"
+        state: directory
+
+    - name: Save container logs
+      loop: "{{ docker_containers.stdout_lines | default([]) }}"
+      shell: "docker logs {{ item }} &> {{ ansible_user_dir }}/zuul-output/logs/docker/{{ item }}.txt"
+      args:
+        executable: /bin/bash
