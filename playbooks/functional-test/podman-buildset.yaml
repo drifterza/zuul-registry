@@ -6,9 +6,9 @@
     src: files/registries.conf
   become: true
 
-- name: Start the namespaced registry
+- name: Start the registry
   shell:
-    cmd: docker-compose -f namespaced-compose.yaml up -d
+    cmd: docker-compose up -d
     chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
 
 - name: Wait for registry to come up
@@ -35,13 +35,13 @@
     content: "{{ new_user_config | to_nice_json }}"
     dest: "/run/user/{{ ansible_user_uid }}/auth.json"
 
-- name: Copy the test image into the buildset registry
+- name: Copy the test image into the registry
   command: >
     skopeo copy --dest-creds testuser:testpass
       docker-archive:{{ workspace }}/test.img
-      docker://localhost:9000/docker.io/test/image:latest
+      docker://localhost:9000/test/image:latest
 
-- name: Copy the test image into the buildset registry
+- name: Copy the test image into the registry
   command: >
     skopeo copy --dest-creds testuser:testpass
       docker-archive:{{ workspace }}/test.img
@@ -55,7 +55,7 @@
     - "'test/quay-image' in image_list.stdout"
     - "'alpine' in image_list.stdout"
 
-- name: Pull the shadowed docker image from the buildset registry
+- name: Pull the shadowed docker image from the registry
   command: podman pull test/image
 
 - name: Print list of images
@@ -66,7 +66,7 @@
 - name: Remove the test image from the local cache
   command: podman rmi docker.io/test/image
 
-- name: Pull the shadowed quay image from the buildset registry
+- name: Pull the shadowed quay image from the registry
   command: podman pull quay.io/test/quay-image
 
 - name: Print list of images
@@ -104,9 +104,9 @@
 - name: Remove the test image from the local cache
   command: podman rmi quay.io/0xff/alpine-sshd
 
-- name: Stop the namespaced registry
+- name: Stop the registry
   shell:
-    cmd: docker-compose -f namespaced-compose.yaml down
+    cmd: docker-compose down
     chdir: "{{ ansible_user_dir }}/src/opendev.org/zuul/zuul-registry/playbooks/functional-test"
 
 - name: Clean up docker volumes

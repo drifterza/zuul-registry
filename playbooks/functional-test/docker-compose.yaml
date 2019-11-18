@@ -6,7 +6,7 @@ services:
   registry:
     image: zuul/zuul-registry
     volumes:
-      - "./standard-conf/:/conf/:z"
+      - "./conf/:/conf/:z"
       - "/tmp/registry-test/tls/:/tls:z"
     ports:
       - "9000:9000"
