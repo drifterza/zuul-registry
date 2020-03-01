@@ -21,6 +21,8 @@ import logging
 import cherrypy
 import hashlib
 import json
+import typing
+import functools
 import yaml
 
 from . import filesystem
@@ -310,7 +312,8 @@ class RegistryServer:
 
     def __init__(self, config_path):
         self.log.info("Loading config from %s", config_path)
-        self._load_config(config_path)
+        self.conf = RegistryServer.load_config(
+            config_path, os.environ)['registry']
 
         # TODO: pyopenssl?
         cherrypy.server.ssl_module = 'builtin'
@@ -376,10 +379,17 @@ class RegistryServer:
 
         cherrypy.tree.mount(api, '/', config=conf)
 
-    def _load_config(self, path):
+    @staticmethod
+    def load_config(path: str, env: typing.Dict[str, str]) -> typing.Any:
+        """Replace path content value of the form %(ZUUL_ENV_NAME) with environment,
+           Then return the yaml load result"""
         with open(path) as f:
-            conf = yaml.safe_load(f.read())
-        self.conf = conf['registry']
+            return yaml.safe_load(functools.reduce(
+                lambda config, env_item: config.replace(
+                    f"%({env_item[0]})", env_item[1]),
+                [(k, v) for k, v in env.items() if k.startswith('ZUUL_')],
+                f.read()
+            ))
 
     @property
     def port(self):

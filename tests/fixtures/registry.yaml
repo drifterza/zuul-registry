@@ -1,0 +1,14 @@
+registry:
+  address: '0.0.0.0'
+  port: 9000
+  public-url: https://localhost:9000
+  tls-cert: /tmp/test/cert.pem
+  tls-key: /tmp/test/cert.key
+  secret: "%(ZUUL_REGISTRY_SECRET)"
+  users:
+    - name: testuser
+      pass: testpass
+      access: write
+  storage:
+    driver: filesystem
+    root: /tmp/test/storage
