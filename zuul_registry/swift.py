@@ -94,7 +94,7 @@ class SwiftDriver(storageutils.StorageDriver):
             return None
         return ret.headers['Content-Length']
 
-    def put_object(self, path, data):
+    def put_object(self, path, data, uuid=None):
         name = None
         try:
             with tempfile.NamedTemporaryFile('wb', delete=False) as f:
@@ -109,6 +109,24 @@ class SwiftDriver(storageutils.StorageDriver):
                     self.container_name,
                     path,
                     filename=name))
+
+            # Get the md5sum and size of the object, and make sure it
+            # matches the upload.
+            ret = retry_function(lambda: self.conn.session.head(
+                self.get_url(path)))
+            try:
+                size = int(ret.headers.get('Content-Length', ''))
+            except ValueError:
+                size = None
+            md5 = ret.headers.get('Etag', '')
+            sdk_md5 = ret.headers.get('X-Object-Meta-X-Sdk-Md5', '')
+            self.log.debug("[u: %s] Upload object %s "
+                           "md5: %s sdkmd5: %s size: %s",
+                           uuid, path, md5, sdk_md5, size)
+            if md5 != sdk_md5:
+                raise Exception("Swift and SDK md5s did not match (u: %s)" %
+                                uuid)
+
         finally:
             if name:
                 os.unlink(name)
@@ -138,28 +156,87 @@ class SwiftDriver(storageutils.StorageDriver):
             lambda: self.conn.session.delete(
                 self.get_url(path)))
 
-    def move_object(self, src_path, dst_path):
+    def move_object(self, src_path, dst_path, uuid=None):
         dst = os.path.join(self.container_name, dst_path)
+
+        # Get the md5sum and size of the object, and make sure it
+        # matches on both sides of the copy.
+        ret = retry_function(lambda: self.conn.session.head(
+            self.get_url(src_path)))
+        try:
+            size = int(ret.headers.get('Content-Length', ''))
+        except ValueError:
+            size = None
+        md5 = ret.headers.get('Etag', '')
+        sdk_md5 = ret.headers.get('X-Object-Meta-X-Sdk-Md5', '')
+        old_md = dict(md5=md5, sdk_md5=sdk_md5, size=size)
+        self.log.debug("[u: %s] Move object %s %s %s",
+                       uuid, src_path, dst_path, old_md)
+        if md5 != sdk_md5:
+            raise Exception("Swift and SDK md5s did not match at start "
+                            "of copy (u: %s) %s" % (uuid, old_md))
+
+        # FIXME: The multipart-manifest argument below means that in
+        # the event this docker chunk is a large object, we intend to
+        # copy the manifest but not the underlying large object
+        # segments.  That seems incorrect, and we should actually just
+        # recast the large object segments into docker chunks and
+        # discard this manifest.  But first we should verify that's
+        # what's happening -- it's not clear we ever hit a segment
+        # limit in practice, so we may never have a large object
+        # chunk.
         retry_function(
             lambda: self.conn.session.request(
                 self.get_url(src_path) + "?multipart-manfest=get",
                 'COPY',
                 headers={'Destination': dst}
             ))
+
+        # Get the md5sum and size of the object, and make sure it
+        # matches on both sides of the copy.
+        ret = retry_function(lambda: self.conn.session.head(
+            self.get_url(dst_path)))
+        try:
+            size = int(ret.headers.get('Content-Length', ''))
+        except ValueError:
+            size = None
+        md5 = ret.headers.get('Etag', '')
+        sdk_md5 = ret.headers.get('X-Object-Meta-X-Sdk-Md5', '')
+        new_md = dict(md5=md5, sdk_md5=sdk_md5, size=size)
+        self.log.debug("[u: %s] Moved object %s %s %s",
+                       uuid, src_path, dst_path, new_md)
+        if md5 != sdk_md5:
+            raise Exception("Swift and SDK md5s did not match at end of copy "
+                            "(u: %s) %s" % (uuid, new_md))
+        if old_md != new_md:
+            raise Exception("Object metadata did not match after copy "
+                            "(u: %s) old: %s new: %s" % (uuid, old_md, new_md))
+
         retry_function(
             lambda: self.conn.session.delete(
                 self.get_url(src_path)))
 
-    def cat_objects(self, path, chunks):
+    def cat_objects(self, path, chunks, uuid=None):
         manifest = []
         # TODO: Would it be better to move 1-chunk objects?
-        for chunk_path in chunks:
+        for chunk in chunks:
             ret = retry_function(
-                lambda: self.conn.session.head(self.get_url(chunk_path)))
-            if int(ret.headers['Content-Length']) == 0:
+                lambda: self.conn.session.head(self.get_url(chunk['path'])))
+            size = int(ret.headers['Content-Length'])
+            if size == 0:
                 continue
+            etag = ret.headers['Etag']
+            sdk_md5 = ret.headers['X-Object-Meta-X-Sdk-Md5']
+            if not (sdk_md5 == etag == chunk['md5']):
+                raise Exception("Object metadata did not match during cat "
+                                "(u: %s) orig: %s sdk: %s etag: %s" % (
+                                    uuid, chunk['md5'], sdk_md5, etag))
+            if not (size == chunk['size']):
+                raise Exception("Object metadata did not match during cat "
+                                "(u: %s) orig: %s size: %s" % (
+                                    uuid, chunk['size'], size))
             manifest.append({'path':
-                             os.path.join(self.container_name, chunk_path),
+                             os.path.join(self.container_name, chunk['path']),
                              'etag': ret.headers['Etag'],
                              'size_bytes': ret.headers['Content-Length']})
         retry_function(lambda:

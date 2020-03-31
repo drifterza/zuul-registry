@@ -196,8 +196,8 @@ class RegistryAPI:
         namespace, repository = self.get_namespace(repository)
         method = cherrypy.request.method
         uuid = self.storage.start_upload(namespace)
-        self.log.info('Start upload %s %s %s uuid %s digest %s',
-                      method, namespace, repository, uuid, digest)
+        self.log.info('[u: %s] Start upload %s %s %s digest %s',
+                      uuid, method, namespace, repository, digest)
         res = cherrypy.response
         res.headers['Location'] = '/v2/%s/blobs/uploads/%s' % (
             orig_repository, uuid)
@@ -210,7 +210,8 @@ class RegistryAPI:
     def upload_chunk(self, repository, uuid):
         orig_repository = repository
         namespace, repository = self.get_namespace(repository)
-        self.log.info('Upload chunk %s %s %s', namespace, repository, uuid)
+        self.log.info('[u: %s] Upload chunk %s %s',
+                      uuid, namespace, repository)
         old_length, new_length = self.storage.upload_chunk(
             namespace, uuid, cherrypy.request.body)
         res = cherrypy.response
@@ -220,17 +221,22 @@ class RegistryAPI:
         res.headers['Range'] = '0-%s' % (new_length,)
         res.status = '204 No Content'
         self.log.info(
-            'Finish Upload chunk %s %s %s', repository, uuid, new_length)
+            '[u: %s] Finish Upload chunk %s %s', uuid, repository, new_length)
 
     @cherrypy.expose
     @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def finish_upload(self, repository, uuid, digest):
         orig_repository = repository
         namespace, repository = self.get_namespace(repository)
-        self.log.info('Finish upload %s %s %s', namespace, repository, uuid)
+        self.log.info('[u: %s] Upload final chunk %s %s',
+                      uuid, namespace, repository)
         old_length, new_length = self.storage.upload_chunk(
             namespace, uuid, cherrypy.request.body)
+        self.log.debug('[u: %s] Store upload %s %s',
+                       uuid, namespace, repository)
         self.storage.store_upload(namespace, uuid, digest)
+        self.log.info('[u: %s] Upload complete %s %s',
+                      uuid, namespace, repository)
         res = cherrypy.response
         res.headers['Location'] = '/v2/%s/blobs/%s' % (orig_repository, digest)
         res.headers['Docker-Content-Digest'] = digest
@@ -409,18 +415,20 @@ def main():
                         help='Command: serve, prune',
                         default='serve')
     args = parser.parse_args()
-    logformat = '%(levelname)s %(name)s: %(message)s'
+    logformat = '%(asctime)s %(levelname)s %(name)s: %(message)s'
     if args.debug or os.environ.get('DEBUG') == '1':
         logging.basicConfig(level=logging.DEBUG, format=logformat)
+        logging.getLogger("openstack").setLevel(logging.DEBUG)
+        logging.getLogger("urllib3").setLevel(logging.DEBUG)
+        logging.getLogger("requests").setLevel(logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO, format=logformat)
+        logging.getLogger("openstack").setLevel(logging.INFO)
+        logging.getLogger("urllib3").setLevel(logging.ERROR)
+        logging.getLogger("requests").setLevel(logging.ERROR)
         cherrypy.log.access_log.propagate = False
-    logging.getLogger("requests").setLevel(logging.DEBUG)
     logging.getLogger("keystoneauth").setLevel(logging.ERROR)
-    logging.getLogger("urllib3").setLevel(logging.DEBUG)
-    logging.getLogger("stevedore").setLevel(logging.INFO)
-    logging.getLogger("openstack").setLevel(logging.DEBUG)
-    # cherrypy.log.error_log.propagate = False
+    logging.getLogger("stevedore").setLevel(logging.ERROR)
 
     s = RegistryServer(args.config)
     if args.command == 'serve':

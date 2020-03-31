@@ -19,6 +19,7 @@ import logging
 import os
 import queue
 import rehash
+import hashlib
 import threading
 import time
 from uuid import uuid4
@@ -167,7 +168,9 @@ class Storage:
 
     def _update_upload(self, namespace, uuid, upload):
         path = os.path.join(namespace, 'uploads', uuid, 'metadata')
-        self.backend.put_object(path, upload.dump())
+        self.log.debug("[u: %s] Update upload metadata chunks: %s",
+                       uuid, upload.chunks)
+        self.backend.put_object(path, upload.dump(), uuid)
 
     def upload_chunk(self, namespace, uuid, fp):
         """Add a chunk to an upload.
@@ -188,9 +191,13 @@ class Storage:
         path = os.path.join(namespace, 'uploads', uuid, str(upload.count + 1))
         streamer = UploadStreamer()
         t = threading.Thread(target=self.backend.put_object,
-                             args=(path, streamer))
+                             args=(path, streamer, uuid))
         t.start()
         size = 0
+        # This calculates the md5 of just this chunk for internal
+        # integrity checking; it is not the overall hash of the layer
+        # (that's a running calculation in the upload record).
+        chunk_hasher = hashlib.md5()
         while True:
             try:
                 d = fp.read(4096)
@@ -200,11 +207,12 @@ class Storage:
             if not d:
                 break
             upload.hasher.update(d)
+            chunk_hasher.update(d)
             size += len(d)
             streamer.write(d)
         streamer.write(None)
         t.join()
-        upload.chunks.append(dict(size=size))
+        upload.chunks.append(dict(size=size, md5=chunk_hasher.hexdigest()))
         self._update_upload(namespace, uuid, upload)
         return upload.size - size, upload.size
 
@@ -223,14 +231,15 @@ class Storage:
         # Move the chunks into the blob dir to get them out of the
         # uploads dir.
         chunks = []
-        for i in range(1, upload.count + 1):
-            src_path = os.path.join(namespace, 'uploads', uuid, str(i))
-            dst_path = os.path.join(namespace, 'blobs', digest, str(i))
-            chunks.append(dst_path)
-            self.backend.move_object(src_path, dst_path)
+        for i, chunk in enumerate(upload.chunks):
+            src_path = os.path.join(namespace, 'uploads', uuid, str(i + 1))
+            dst_path = os.path.join(namespace, 'blobs', digest, str(i + 1))
+            chunks.append(dict(path=dst_path,
+                               md5=chunk['md5'], size=chunk['size']))
+            self.backend.move_object(src_path, dst_path, uuid)
         # Concatenate the chunks into one blob.
         path = os.path.join(namespace, 'blobs', digest, 'data')
-        self.backend.cat_objects(path, chunks)
+        self.backend.cat_objects(path, chunks, uuid)
         path = os.path.join(namespace, 'uploads', uuid, 'metadata')
         self.backend.delete_object(path)
 
