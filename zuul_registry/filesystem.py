@@ -43,7 +43,7 @@ class FilesystemDriver(storageutils.StorageDriver):
             return None
         return os.stat(path).st_size
 
-    def put_object(self, path, data):
+    def put_object(self, path, data, uuid=None):
         path = os.path.join(self.root, path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as f:
@@ -99,26 +99,26 @@ class FilesystemDriver(storageutils.StorageDriver):
             else:
                 os.unlink(path)
 
-    def move_object(self, src_path, dst_path):
+    def move_object(self, src_path, dst_path, uuid=None):
         src_path = os.path.join(self.root, src_path)
         dst_path = os.path.join(self.root, dst_path)
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
         os.rename(src_path, dst_path)
 
-    def cat_objects(self, path, chunks):
+    def cat_objects(self, path, chunks, uuid=None):
         path = os.path.join(self.root, path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as outf:
-            for chunk_path in chunks:
-                chunk_path = os.path.join(self.root, chunk_path)
+            for chunk in chunks:
+                chunk_path = os.path.join(self.root, chunk['path'])
                 with open(chunk_path, 'rb') as inf:
                     while True:
                         d = inf.read(4096)
                         if not d:
                             break
                         outf.write(d)
-        for chunk_path in chunks:
-            chunk_path = os.path.join(self.root, chunk_path)
+        for chunk in chunks:
+            chunk_path = os.path.join(self.root, chunk['path'])
             os.unlink(chunk_path)
 
 
