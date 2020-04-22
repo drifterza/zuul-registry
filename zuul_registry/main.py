@@ -192,6 +192,15 @@ class RegistryAPI:
         return data_iter
 
     @cherrypy.expose
+    @cherrypy.tools.json_out(content_type='application/json; charset=utf-8')
+    def get_tags(self, repository):
+        namespace, repository = self.get_namespace(repository)
+        self.log.info('Get tags %s %s', namespace, repository)
+        tags = self.storage.list_tags(namespace, repository)
+        return {'name': repository,
+                'tags': [t.name for t in tags]}
+
+    @cherrypy.expose
     @cherrypy.config(**{'tools.check_auth.level': Authorization.WRITE})
     def start_upload(self, repository, digest=None):
         orig_repository = repository
@@ -355,6 +364,9 @@ class RegistryServer:
         route_map.connect('api', '/v2/{repository:.*}/blobs/{digest}',
                           conditions=dict(method=['GET']),
                           controller=api, action='get_blob')
+        route_map.connect('api', '/v2/{repository:.*}/tags/list',
+                          conditions=dict(method=['GET']),
+                          controller=api, action='get_tags')
         route_map.connect('authz', '/auth/token',
                           controller=authz, action='token')
 

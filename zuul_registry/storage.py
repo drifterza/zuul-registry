@@ -251,6 +251,10 @@ class Storage:
         path = os.path.join(namespace, 'repos', repo, 'manifests', tag)
         return self.backend.get_object(path)
 
+    def list_tags(self, namespace, repo):
+        path = os.path.join(namespace, 'repos', repo, 'manifests')
+        return self.backend.list_objects(path)
+
     def prune(self):
         """Prune the registry
 
