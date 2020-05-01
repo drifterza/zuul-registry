@@ -281,9 +281,11 @@ class RegistryAPI:
     @cherrypy.expose
     def get_manifest(self, repository, ref):
         namespace, repository = self.get_namespace(repository)
+        method = cherrypy.request.method
         headers = cherrypy.request.headers
         res = cherrypy.response
-        self.log.info('Get manifest %s %s %s', namespace, repository, ref)
+        self.log.info(
+            '%s manifest %s %s %s', method, namespace, repository, ref)
         if ref.startswith('sha256:'):
             manifest = self.storage.get_blob(namespace, ref)
             if manifest is None:
@@ -291,7 +293,7 @@ class RegistryAPI:
                 return self.not_found()
             res.headers['Content-Type'] = json.loads(manifest)['mediaType']
             res.headers['Docker-Content-Digest'] = ref
-            return manifest
+            return (method == 'GET' and manifest or {})
         manifest = self.storage.get_manifest(namespace, repository, ref)
         if manifest is None:
             manifest = {}
@@ -311,7 +313,7 @@ class RegistryAPI:
                 hasher = hashlib.sha256()
                 hasher.update(data)
                 self.log.debug('Retrieved sha256 %s', hasher.hexdigest())
-                return data
+                return (method == 'GET' and data or {})
         self.log.error('Manifest %s %s not found', repository, ref)
         return self.not_found()
 
@@ -356,7 +358,7 @@ class RegistryServer:
                           conditions=dict(method=['PUT']),
                           controller=api, action='put_manifest')
         route_map.connect('api', '/v2/{repository:.*}/manifests/{ref}',
-                          conditions=dict(method=['GET']),
+                          conditions=dict(method=['GET', 'HEAD']),
                           controller=api, action='get_manifest')
         route_map.connect('api', '/v2/{repository:.*}/blobs/{digest}',
                           conditions=dict(method=['HEAD']),
