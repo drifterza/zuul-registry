@@ -292,8 +292,14 @@ class RegistryAPI:
                 self.log.error('Manifest %s %s not found', repository, ref)
                 return self.not_found()
             res.headers['Content-Type'] = json.loads(manifest)['mediaType']
+            if method == 'HEAD':
+                # Buildkit gets confused if the Docker-Content-Digest
+                # header is present in a HEAD response.  It seems to
+                # assume that it's the digest of the returned (null)
+                # data.
+                return {}
             res.headers['Docker-Content-Digest'] = ref
-            return (method == 'GET' and manifest or {})
+            return manifest
         manifest = self.storage.get_manifest(namespace, repository, ref)
         if manifest is None:
             manifest = {}
@@ -309,11 +315,14 @@ class RegistryAPI:
                         'Blob %s %s not found', namespace, manifest[ct])
                     return self.not_found()
                 res.headers['Content-Type'] = ct
-                res.headers['Docker-Content-Digest'] = manifest[ct]
                 hasher = hashlib.sha256()
                 hasher.update(data)
                 self.log.debug('Retrieved sha256 %s', hasher.hexdigest())
-                return (method == 'GET' and data or {})
+                if method == 'HEAD':
+                    # See comment above about Buildkit.
+                    return {}
+                res.headers['Docker-Content-Digest'] = manifest[ct]
+                return data
         self.log.error('Manifest %s %s not found', repository, ref)
         return self.not_found()
 
